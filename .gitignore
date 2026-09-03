@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+dist/
+.vite/
+*.local
+
+# Data warehouse artifacts
+data/*.duckdb
+data/*.duckdb.wal
+data/cache/
+
+# dbt
+dbt/portfolio/target/
+dbt/portfolio/dbt_packages/
+dbt/portfolio/logs/
+.user.yml
+
+# Env
+.env
+.env.*
+!.env.example
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
