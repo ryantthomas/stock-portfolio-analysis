@@ -4,6 +4,27 @@ import type { HoldingInput } from "../lib/types";
 import { PRESETS } from "../lib/presets";
 
 const STORAGE_KEY = "portfolio-analyzer:holdings:v1";
+const MODE_KEY = "portfolio-analyzer:input-mode:v1";
+
+/**
+ * How the user is entering position sizes.
+ *
+ * "percent" -- shares of the portfolio, expected to total 100.
+ * "amount"  -- money invested per position; percentages are derived.
+ *
+ * The distinction is purely presentational. Both modes send the same numbers
+ * to the API, which normalizes any set of positive values proportionally, so
+ * $5,000/$3,000/$2,000 and 50/30/20 produce an identical analysis.
+ */
+export type InputMode = "percent" | "amount";
+
+function loadMode(): InputMode {
+  try {
+    return localStorage.getItem(MODE_KEY) === "amount" ? "amount" : "percent";
+  } catch {
+    return "percent";
+  }
+}
 
 function makeId(): string {
   return Math.random().toString(36).slice(2, 10);
@@ -59,6 +80,15 @@ export function usePortfolio() {
   const [holdings, setHoldings] = useState<HoldingInput[]>(
     () => loadStored() ?? defaultHoldings(),
   );
+  const [inputMode, setInputMode] = useState<InputMode>(loadMode);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(MODE_KEY, inputMode);
+    } catch {
+      // Persistence is a convenience; the mode still works for this session.
+    }
+  }, [inputMode]);
 
   useEffect(() => {
     try {
@@ -78,6 +108,25 @@ export function usePortfolio() {
     () => holdings.filter((h) => h.ticker.trim().length > 0 && h.weight > 0),
     [holdings],
   );
+
+  /**
+   * Each row's share of the portfolio, whatever units were typed in.
+   *
+   * This is the same proportional normalization the API applies, mirrored on
+   * the client so the UI can show the resulting split live while editing.
+   */
+  const percentages = useMemo(() => {
+    const total = holdings.reduce(
+      (sum, h) => sum + (h.weight > 0 ? h.weight : 0),
+      0,
+    );
+    const out = new Map<string, number>();
+    if (total <= 0) return out;
+    for (const holding of holdings) {
+      out.set(holding.id, holding.weight > 0 ? holding.weight / total : 0);
+    }
+    return out;
+  }, [holdings]);
 
   const duplicates = useMemo(() => {
     const seen = new Map<string, number>();
@@ -139,8 +188,41 @@ export function usePortfolio() {
 
   const clear = useCallback(() => setHoldings([blankHolding()]), []);
 
+  /**
+   * Switch entry mode, converting the existing numbers so the split is
+   * preserved. Leaving "50" in the field when it flips from 50% to $50 would
+   * silently change what the user is looking at, even though the normalized
+   * result happens to be the same.
+   */
+  const changeInputMode = useCallback(
+    (next: InputMode, portfolioValue = 10000) => {
+      setInputMode((current) => {
+        if (current === next) return current;
+        setHoldings((rows) => {
+          const total = rows.reduce(
+            (sum, h) => sum + (h.weight > 0 ? h.weight : 0),
+            0,
+          );
+          if (total <= 0) return rows;
+          return rows.map((h) => {
+            if (h.weight <= 0) return h;
+            const share = h.weight / total;
+            const value =
+              next === "amount" ? share * portfolioValue : share * 100;
+            return { ...h, weight: Math.round(value * 100) / 100 };
+          });
+        });
+        return next;
+      });
+    },
+    [],
+  );
+
   return {
     holdings,
+    inputMode,
+    changeInputMode,
+    percentages,
     totalWeight,
     validHoldings,
     duplicates,

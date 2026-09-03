@@ -87,6 +87,8 @@ export function App() {
         <aside className="sidebar">
           <PortfolioBuilder
             holdings={portfolio.holdings}
+            inputMode={portfolio.inputMode}
+            percentages={portfolio.percentages}
             totalWeight={portfolio.totalWeight}
             duplicates={portfolio.duplicates}
             onUpdate={portfolio.updateHolding}
@@ -96,6 +98,7 @@ export function App() {
             onNormalize={portfolio.normalizeToHundred}
             onLoadPreset={portfolio.loadPreset}
             onClear={portfolio.clear}
+            onChangeInputMode={portfolio.changeInputMode}
           />
 
           <AnalysisSettings

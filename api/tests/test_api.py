@@ -143,6 +143,35 @@ class TestValidation:
         request = AnalyzeRequest(holdings=[{"ticker": "  aapl ", "weight": 1}])
         assert request.holdings[0].ticker == "AAPL"
 
+    def test_accepts_dollar_amounts_as_weights(self):
+        """The UI can submit money invested per position, not just percentages."""
+        response = client.post(
+            "/api/portfolio/analyze",
+            json=payload([("VTI", 5000), ("VXUS", 3000), ("BND", 2000)]),
+        )
+        assert response.status_code == 200
+        weights = {h["ticker"]: h["weight"] for h in response.json()["holdings"]}
+        assert weights["VTI"] == pytest.approx(0.5)
+        assert weights["VXUS"] == pytest.approx(0.3)
+        assert weights["BND"] == pytest.approx(0.2)
+
+    def test_dollar_amounts_match_the_equivalent_percentages(self):
+        """$5k/$3k/$2k must analyze identically to 50/30/20."""
+        dollars = client.post(
+            "/api/portfolio/analyze",
+            json=payload([("VTI", 5000), ("VXUS", 3000), ("BND", 2000)]),
+        ).json()
+        percents = client.post(
+            "/api/portfolio/analyze",
+            json=payload([("VTI", 50), ("VXUS", 30), ("BND", 20)]),
+        ).json()
+        assert dollars["diversification"] == percents["diversification"]
+        assert dollars["risk"] == percents["risk"]
+
+    def test_rejects_an_implausibly_large_weight(self):
+        response = client.post("/api/portfolio/analyze", json=payload([("VTI", 1e13)]))
+        assert response.status_code == 422
+
     def test_lookback_window_is_bounded(self):
         response = client.post(
             "/api/portfolio/analyze", json=payload([("AAPL", 100)], lookback_days=5)

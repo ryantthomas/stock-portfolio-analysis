@@ -16,7 +16,14 @@ Built as three layers that can be used independently:
 
 ## Quick start
 
+Requires **Python 3.10+** and **Node 20.19+** (or 22.12+, as Vite 8 needs).
+Nothing else — no database to provision, no API keys.
+
 ```bash
+git clone -b claude/stock-portfolio-webapp-focr1k \
+    https://github.com/ryantthomas/stock-portfolio-analysis.git
+cd stock-portfolio-analysis
+
 make setup      # Python venv + npm install
 make dev        # API on :8000, web on :5173
 ```
@@ -28,6 +35,25 @@ With no market data provider installed the app runs on the built-in **demo**
 provider, which generates simulated prices. It is fully functional and needs no
 network or API keys, and the UI shows a banner whenever it is active so the
 numbers are never mistakable for real market data.
+
+### Entering a portfolio
+
+The app opens with a three-fund portfolio already loaded and analyzed, so there
+is something to react to before you type anything. From there: `+ Add` for a new
+position, `×` to drop one, and a preset picker to start from a different shape.
+
+Position sizes can be entered two ways, toggled at the top of the holdings panel:
+
+- **Percent** — shares of the portfolio. A running total is shown, and
+  `Scale to 100` rescales what you have entered proportionally.
+- **Amount ($)** — what each position is worth. The running total becomes the
+  portfolio's value, and each row shows the percentage it works out to.
+
+Nothing has to add up to a particular number in either mode. Sizes are
+normalized proportionally, so `50/30/20`, `0.5/0.3/0.2` and `$5,000/$3,000/$2,000`
+all describe the same portfolio and produce an identical analysis. Switching
+modes converts the numbers rather than reinterpreting them, so the split you are
+looking at never changes underneath you.
 
 ### Getting real market data
 
@@ -258,11 +284,10 @@ cd api && pytest tests -q
 ```
 
 The frontend pins via `web/package-lock.json`; use `npm ci` for a reproducible
-install. One known advisory is outstanding there: `npm audit` reports an
-esbuild issue reachable through Vite's **dev server only** (a site you visit
-while `make dev` runs could read from it). Production builds are unaffected.
-Clearing it requires Vite 5 → 8, a breaking upgrade held back deliberately so
-the verified setup stays stable.
+install. `npm audit` is clean — Vite 8 builds with rolldown/oxc and drops the
+esbuild dependency that carried the previous dev-server advisory. Vite 8
+requires Node `^20.19 || >=22.12`, declared in `web/package.json` under
+`engines` so npm warns up front on an older runtime.
 
 ---
 

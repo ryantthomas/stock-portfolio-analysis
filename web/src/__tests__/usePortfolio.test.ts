@@ -144,6 +144,103 @@ describe("usePortfolio", () => {
     expect(second.result.current.holdings.map((h) => h.ticker)).toEqual(["VOO", "BND"]);
   });
 
+  describe("input mode", () => {
+    it("defaults to percent", () => {
+      const { result } = renderHook(() => usePortfolio());
+      expect(result.current.inputMode).toBe("percent");
+    });
+
+    it("derives each row's share of the portfolio", () => {
+      const { result } = renderHook(() => usePortfolio());
+      act(() => result.current.loadPreset("60/40"));
+      const [voo, bnd] = result.current.holdings;
+      expect(result.current.percentages.get(voo!.id)).toBeCloseTo(0.6, 6);
+      expect(result.current.percentages.get(bnd!.id)).toBeCloseTo(0.4, 6);
+    });
+
+    it("derives shares from arbitrary units, not just percentages", () => {
+      const { result } = renderHook(() => usePortfolio());
+      act(() => result.current.clear());
+      act(() => {
+        result.current.updateHolding(result.current.holdings[0]!.id, {
+          ticker: "AAPL",
+          weight: 7500,
+        });
+        result.current.addHolding("BND", 2500);
+      });
+      const [a, b] = result.current.holdings;
+      expect(result.current.percentages.get(a!.id)).toBeCloseTo(0.75, 6);
+      expect(result.current.percentages.get(b!.id)).toBeCloseTo(0.25, 6);
+    });
+
+    it("converts percentages into amounts, preserving the split", () => {
+      const { result } = renderHook(() => usePortfolio());
+      act(() => result.current.loadPreset("60/40"));
+      act(() => result.current.changeInputMode("amount", 10000));
+
+      expect(result.current.inputMode).toBe("amount");
+      expect(result.current.holdings.map((h) => h.weight)).toEqual([6000, 4000]);
+      // The split the analysis sees is unchanged.
+      const [voo] = result.current.holdings;
+      expect(result.current.percentages.get(voo!.id)).toBeCloseTo(0.6, 6);
+    });
+
+    it("converts amounts back into percentages", () => {
+      const { result } = renderHook(() => usePortfolio());
+      act(() => result.current.clear());
+      act(() => {
+        result.current.updateHolding(result.current.holdings[0]!.id, {
+          ticker: "AAPL",
+          weight: 7500,
+        });
+        result.current.addHolding("BND", 2500);
+      });
+      act(() => result.current.changeInputMode("amount", 10000));
+      act(() => result.current.changeInputMode("percent"));
+
+      expect(result.current.holdings.map((h) => h.weight)).toEqual([75, 25]);
+      expect(result.current.totalWeight).toBeCloseTo(100, 6);
+    });
+
+    it("is a no-op when switching to the mode already active", () => {
+      const { result } = renderHook(() => usePortfolio());
+      act(() => result.current.loadPreset("60/40"));
+      act(() => result.current.changeInputMode("percent"));
+      expect(result.current.holdings.map((h) => h.weight)).toEqual([60, 40]);
+    });
+
+    it("survives a mode switch with no weights entered", () => {
+      const { result } = renderHook(() => usePortfolio());
+      act(() => result.current.clear());
+      act(() => result.current.changeInputMode("amount", 10000));
+      expect(result.current.inputMode).toBe("amount");
+      expect(result.current.holdings[0]!.weight).toBe(0);
+    });
+
+    it("persists the mode across mounts", () => {
+      const first = renderHook(() => usePortfolio());
+      act(() => first.result.current.changeInputMode("amount", 10000));
+      first.unmount();
+
+      const second = renderHook(() => usePortfolio());
+      expect(second.result.current.inputMode).toBe("amount");
+    });
+
+    it("leaves zero-weight rows alone when converting", () => {
+      const { result } = renderHook(() => usePortfolio());
+      act(() => result.current.clear());
+      act(() => {
+        result.current.updateHolding(result.current.holdings[0]!.id, {
+          ticker: "AAPL",
+          weight: 100,
+        });
+        result.current.addHolding("MSFT", 0);
+      });
+      act(() => result.current.changeInputMode("amount", 5000));
+      expect(result.current.holdings.map((h) => h.weight)).toEqual([5000, 0]);
+    });
+  });
+
   it("falls back to the default when stored data is corrupt", () => {
     localStorage.setItem("portfolio-analyzer:holdings:v1", "{not json");
     const { result } = renderHook(() => usePortfolio());

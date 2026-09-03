@@ -1,9 +1,13 @@
 import { TickerInput } from "./TickerInput";
 import { PRESETS } from "../lib/presets";
+import { percent } from "../lib/format";
+import type { InputMode } from "../hooks/usePortfolio";
 import type { HoldingInput } from "../lib/types";
 
 interface Props {
   holdings: HoldingInput[];
+  inputMode: InputMode;
+  percentages: Map<string, number>;
   totalWeight: number;
   duplicates: Set<string>;
   onUpdate: (id: string, patch: Partial<HoldingInput>) => void;
@@ -13,6 +17,16 @@ interface Props {
   onNormalize: () => void;
   onLoadPreset: (name: string) => void;
   onClear: () => void;
+  onChangeInputMode: (mode: InputMode) => void;
+}
+
+/** Compact money formatting for the running total. */
+function money(value: number): string {
+  return value.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: value >= 1000 ? 0 : 2,
+  });
 }
 
 /**
@@ -24,6 +38,8 @@ interface Props {
  */
 export function PortfolioBuilder({
   holdings,
+  inputMode,
+  percentages,
   totalWeight,
   duplicates,
   onUpdate,
@@ -33,9 +49,12 @@ export function PortfolioBuilder({
   onNormalize,
   onLoadPreset,
   onClear,
+  onChangeInputMode,
 }: Props) {
-  // Within a rounding hair of 100 counts as balanced.
-  const balanced = Math.abs(totalWeight - 100) < 0.51;
+  const isAmount = inputMode === "amount";
+  // Within a rounding hair of 100 counts as balanced. In amount mode there is
+  // no target to hit -- the total is simply what the portfolio is worth.
+  const balanced = isAmount || Math.abs(totalWeight - 100) < 0.51;
   const maxWeight = Math.max(...holdings.map((h) => h.weight), 1);
 
   return (
@@ -46,7 +65,28 @@ export function PortfolioBuilder({
       </div>
 
       <div className="card-body">
-        <label htmlFor="preset-select">Start from a preset</label>
+        <div className="tabs" role="tablist" aria-label="Position size entry mode">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={!isAmount}
+            onClick={() => onChangeInputMode("percent")}
+          >
+            Percent
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={isAmount}
+            onClick={() => onChangeInputMode("amount")}
+          >
+            Amount ($)
+          </button>
+        </div>
+
+        <label htmlFor="preset-select" style={{ marginTop: 14 }}>
+          Start from a preset
+        </label>
         <select
           id="preset-select"
           value=""
@@ -81,11 +121,15 @@ export function PortfolioBuilder({
                   <input
                     type="number"
                     className="numeric"
-                    aria-label={`Weight for holding ${index + 1}`}
+                    aria-label={
+                      isAmount
+                        ? `Amount invested in holding ${index + 1}, in dollars`
+                        : `Weight for holding ${index + 1}, as a percentage`
+                    }
                     min={0}
-                    step={0.5}
+                    step={isAmount ? 100 : 0.5}
                     value={Number.isFinite(holding.weight) ? holding.weight : ""}
-                    placeholder="0"
+                    placeholder={isAmount ? "0" : "0"}
                     onChange={(event) =>
                       onUpdate(holding.id, {
                         weight: event.target.value === "" ? 0 : Number(event.target.value),
@@ -103,8 +147,15 @@ export function PortfolioBuilder({
                   </button>
                 </div>
                 {holding.weight > 0 && (
-                  <div className="weight-bar" aria-hidden="true">
-                    <span style={{ width: `${(holding.weight / maxWeight) * 100}%` }} />
+                  <div className="weight-meta">
+                    <div className="weight-bar" aria-hidden="true">
+                      <span style={{ width: `${(holding.weight / maxWeight) * 100}%` }} />
+                    </div>
+                    {/* The share is the number the analysis actually uses, so
+                        it stays visible even when the input is dollars. */}
+                    <span className="weight-share">
+                      {percent(percentages.get(holding.id) ?? 0, 1)}
+                    </span>
                   </div>
                 )}
                 {isDuplicate && (
@@ -118,10 +169,10 @@ export function PortfolioBuilder({
         </div>
 
         <div className={`weight-summary${balanced ? "" : " off"}`}>
-          <span>Total weight</span>
+          <span>{isAmount ? "Portfolio value" : "Total weight"}</span>
           <strong>
-            {totalWeight.toFixed(2)}
-            {balanced ? " ✓" : ""}
+            {isAmount ? money(totalWeight) : totalWeight.toFixed(2)}
+            {!isAmount && balanced ? " ✓" : ""}
           </strong>
         </div>
 
@@ -134,27 +185,37 @@ export function PortfolioBuilder({
             + Add
           </button>
           <button type="button" className="ghost" onClick={() => onEqualize()}>
-            Equal weight
+            {isAmount ? "Equal split" : "Equal weight"}
           </button>
-          <button
-            type="button"
-            className="ghost"
-            onClick={() => onNormalize()}
-            disabled={totalWeight <= 0}
-            title="Rescale existing weights proportionally to sum to 100"
-          >
-            Scale to 100
-          </button>
+          {!isAmount && (
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => onNormalize()}
+              disabled={totalWeight <= 0}
+              title="Rescale existing weights proportionally to sum to 100"
+            >
+              Scale to 100
+            </button>
+          )}
           <button type="button" className="ghost" onClick={() => onClear()}>
             Clear
           </button>
         </div>
 
-        {!balanced && totalWeight > 0 && (
+        {isAmount ? (
           <p style={{ fontSize: 11.5, color: "var(--text-muted)", margin: "10px 0 0" }}>
-            Weights do not sum to 100. They will be normalized proportionally when
-            analyzed, so relative sizing is what matters.
+            Enter what each position is worth. Percentages are derived from the
+            totals, so the amounts never need to reach a particular number.
           </p>
+        ) : (
+          !balanced &&
+          totalWeight > 0 && (
+            <p style={{ fontSize: 11.5, color: "var(--text-muted)", margin: "10px 0 0" }}>
+              Weights do not sum to 100. They will be normalized proportionally
+              when analyzed, so relative sizing is what matters.
+            </p>
+          )
         )}
       </div>
     </section>

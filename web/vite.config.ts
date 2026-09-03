@@ -26,13 +26,17 @@ export default defineConfig({
   build: {
     outDir: "dist",
     sourcemap: true,
-    rollupOptions: {
+    rolldownOptions: {
       output: {
-        // Charting is by far the heaviest dependency and changes far less
-        // often than app code, so it gets its own long-lived cache entry.
-        manualChunks: {
-          charts: ["recharts"],
-          react: ["react", "react-dom"],
+        // Rolldown takes manualChunks as a function; the object form that
+        // Vite 5 accepted throws at build time.
+        //
+        // Third-party code (charting above all, which is most of the bundle)
+        // changes far less often than app code, so it gets its own
+        // long-lived cache entry rather than being invalidated on every edit.
+        manualChunks(id: string) {
+          if (id.includes("node_modules")) return "vendor";
+          return undefined;
         },
       },
     },

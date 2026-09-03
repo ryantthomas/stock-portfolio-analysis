@@ -11,10 +11,17 @@ Severity = Literal["info", "warning", "critical"]
 
 
 class HoldingInput(BaseModel):
-    """A single position as entered by the user: a ticker and its target weight."""
+    """A single position as entered by the user: a ticker and its size.
+
+    ``weight`` is a *relative* quantity, not necessarily a percentage. Weights
+    are normalized proportionally, so 50/30/20, 0.5/0.3/0.2 and dollar amounts
+    of 5000/3000/2000 all describe the same portfolio. The upper bound exists
+    only to reject nonsense input; it must stay high enough to accept a real
+    portfolio's value in whole currency units.
+    """
 
     ticker: str = Field(..., min_length=1, max_length=16)
-    weight: float = Field(..., ge=0, le=1000)
+    weight: float = Field(..., ge=0, le=1e12)
 
     @field_validator("ticker")
     @classmethod
