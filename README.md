@@ -243,6 +243,27 @@ make reset      # wipe the warehouse and start clean
 
 `make help` lists every target.
 
+### Dependencies
+
+Python ranges in `api/pyproject.toml` are capped at the next major (or at 1.0
+for 0.x projects, where a minor bump can break). Both ends are tested rather
+than assumed — the suite passes on the lowest allowed versions (fastapi 0.110,
+pydantic 2.6, numpy 1.26, pandas 2.1, duckdb 0.10) and on the current ceiling
+(fastapi 0.141, pydantic 2.13, numpy 2.4, pandas 3.0, duckdb 1.5).
+
+```bash
+# Re-verify the floor after changing a bound
+uv pip install --resolution lowest-direct -e 'api[dev]'
+cd api && pytest tests -q
+```
+
+The frontend pins via `web/package-lock.json`; use `npm ci` for a reproducible
+install. One known advisory is outstanding there: `npm audit` reports an
+esbuild issue reachable through Vite's **dev server only** (a site you visit
+while `make dev` runs could read from it). Production builds are unaffected.
+Clearing it requires Vite 5 → 8, a breaking upgrade held back deliberately so
+the verified setup stays stable.
+
 ---
 
 ## Notes and limitations

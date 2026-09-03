@@ -3,23 +3,37 @@ name = "portfolio-api"
 version = "0.1.0"
 description = "Portfolio analytics API: market data ingestion, risk/diversification analytics, DuckDB + dbt warehouse"
 requires-python = ">=3.10"
+# Version policy: every range is capped at the next major (or, for 0.x
+# projects where a minor bump can break, at 1.0) so a future release cannot
+# silently change behaviour on a fresh install.
+#
+# Both ends of the core range are tested, not assumed -- the suite passes on
+# the floor (numpy 1.26, pandas 2.1, duckdb 0.10, fastapi 0.110, pydantic 2.6)
+# and on the current ceiling (numpy 2.4, pandas 3.0, duckdb 1.5, fastapi 0.141,
+# pydantic 2.13). Widen a bound only after testing the version you are adding.
+#
+# Re-verify the floor after any change:
+#     uv pip install --resolution lowest-direct -e 'api[dev]' && pytest api/tests
 dependencies = [
-    "fastapi>=0.110",
-    "uvicorn[standard]>=0.27",
-    "pydantic>=2.6",
-    "pydantic-settings>=2.2",
-    "numpy>=1.26",
-    "pandas>=2.1",
-    "duckdb>=0.10",
-    "httpx>=0.27",
+    "fastapi>=0.110,<1.0",
+    "uvicorn[standard]>=0.27,<1.0",
+    "pydantic>=2.6,<3",
+    "pydantic-settings>=2.2,<3",
+    "numpy>=1.26,<3",
+    "pandas>=2.1,<4",
+    "duckdb>=0.10,<2",
+    "httpx>=0.27,<1.0",
 ]
 
 [project.optional-dependencies]
-# Market data providers. Install what you want; the provider chain degrades gracefully.
-yfinance = ["yfinance>=0.2.40"]
-openbb = ["openbb>=4.3.0"]
-dbt = ["dbt-core>=1.8", "dbt-duckdb>=1.8"]
-dev = ["pytest>=8.0", "httpx>=0.27", "ruff>=0.4"]
+# Market data providers. Install what you want; the provider chain degrades
+# gracefully. These two are capped at the next major but are NOT covered by the
+# test suite, which runs against the offline demo provider.
+yfinance = ["yfinance>=0.2.40,<1.0"]
+openbb = ["openbb>=4.3.0,<5"]
+# dbt build is verified on dbt-core 1.12 / dbt-duckdb 1.11.
+dbt = ["dbt-core>=1.8,<2", "dbt-duckdb>=1.8,<2"]
+dev = ["pytest>=8.0,<10", "httpx>=0.27,<1.0", "ruff>=0.4,<1.0"]
 
 [build-system]
 requires = ["hatchling"]
