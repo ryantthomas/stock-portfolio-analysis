@@ -126,20 +126,26 @@ export function PortfolioBuilder({
         </div>
 
         <div className="button-row" style={{ marginTop: 12 }}>
-          <button type="button" onClick={onAdd}>+ Add</button>
-          <button type="button" className="ghost" onClick={onEqualize}>
+          {/* Each handler is wrapped so React's click event is never passed
+              through as a positional argument -- onAdd takes optional
+              (ticker, weight) parameters, and handing it a MouseEvent as the
+              ticker corrupts the row. */}
+          <button type="button" onClick={() => onAdd()}>
+            + Add
+          </button>
+          <button type="button" className="ghost" onClick={() => onEqualize()}>
             Equal weight
           </button>
           <button
             type="button"
             className="ghost"
-            onClick={onNormalize}
+            onClick={() => onNormalize()}
             disabled={totalWeight <= 0}
             title="Rescale existing weights proportionally to sum to 100"
           >
             Scale to 100
           </button>
-          <button type="button" className="ghost" onClick={onClear}>
+          <button type="button" className="ghost" onClick={() => onClear()}>
             Clear
           </button>
         </div>

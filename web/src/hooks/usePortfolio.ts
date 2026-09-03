@@ -9,8 +9,15 @@ function makeId(): string {
   return Math.random().toString(36).slice(2, 10);
 }
 
-export function blankHolding(ticker = "", weight = 0): HoldingInput {
-  return { id: makeId(), ticker, weight };
+export function blankHolding(ticker: unknown = "", weight: unknown = 0): HoldingInput {
+  // Coerced rather than trusted: `addHolding` is used directly as a click
+  // handler in places, and a stray event object here would otherwise crash
+  // every consumer that calls `.trim()` on the ticker.
+  return {
+    id: makeId(),
+    ticker: typeof ticker === "string" ? ticker : "",
+    weight: typeof weight === "number" && Number.isFinite(weight) ? weight : 0,
+  };
 }
 
 function defaultHoldings(): HoldingInput[] {

@@ -59,9 +59,15 @@ models:
     description: >
       Concentration, correlation and volatility-reduction metrics. The single
       most useful table for answering "is this portfolio actually diversified".
+      One row per saved snapshot; filter on created_at for the latest run of a
+      given label.
     columns:
       - name: portfolio_id
         tests: [not_null, unique]
+      - name: portfolio_label
+        description: User-supplied portfolio name, or 'unnamed'.
+      - name: created_at
+        description: When the snapshot was saved.
       - name: hhi
         description: Herfindahl index of position weights; 1.0 is a single holding.
         tests: [not_null]

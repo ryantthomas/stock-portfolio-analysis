@@ -20,6 +20,8 @@ concentration as (
 
     select
         portfolio_id,
+        any_value(portfolio_label) as portfolio_label,
+        max(created_at)            as created_at,
         count(*)                  as holdings_count,
         sum(power(weight, 2))     as hhi,
         max(weight)               as top_weight,
@@ -89,6 +91,8 @@ correlations as (
 
 select
     c.portfolio_id,
+    c.portfolio_label,
+    c.created_at,
     c.holdings_count,
     c.hhi,
     {{ safe_divide('1.0', 'c.hhi') }}      as effective_holdings,
