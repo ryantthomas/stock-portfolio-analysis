@@ -96,7 +96,7 @@ def analyze(request: AnalyzeRequest, persist: bool = True) -> AnalyzeResponse:
     index_dates = [d.date() if hasattr(d, "date") else d for d in prices.index]
 
     if persist:
-        _persist(result, weights, request.benchmark)
+        _persist(result, weights, request.benchmark, request.label)
 
     return AnalyzeResponse(
         as_of=index_dates[-1] if index_dates else None,
@@ -123,11 +123,16 @@ def analyze(request: AnalyzeRequest, persist: bool = True) -> AnalyzeResponse:
     )
 
 
-def _persist(result: ProviderResult, weights: dict[str, float], benchmark: str) -> None:
+def _persist(
+    result: ProviderResult,
+    weights: dict[str, float],
+    benchmark: str,
+    label: str | None = None,
+) -> None:
     """Land raw data in DuckDB. Never fail the request over a warehouse error."""
     try:
         warehouse.load_prices(result.prices, result.provider)
         warehouse.load_securities(result.metadata, result.provider)
-        warehouse.save_portfolio(weights, benchmark)
+        warehouse.save_portfolio(weights, benchmark, label)
     except Exception as exc:  # noqa: BLE001 - persistence is a side effect
         log.warning("Warehouse persistence failed: %s", exc)

@@ -1,0 +1,10 @@
+# dbt connects to the same DuckDB file the API writes its raw tables into.
+# DUCKDB_PATH is exported by the API when it shells out to dbt; the default
+# keeps `dbt build` working when run by hand from this directory.
+portfolio:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('DUCKDB_PATH', '../../data/warehouse.duckdb') }}"
+      threads: 4

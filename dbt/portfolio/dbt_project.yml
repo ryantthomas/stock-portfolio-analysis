@@ -1,0 +1,34 @@
+name: portfolio
+version: "1.0.0"
+config-version: 2
+
+profile: portfolio
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+vars:
+  # Trading days per year, used to annualize daily statistics.
+  trading_days: 252
+  # Annualized risk-free rate for Sharpe ratios.
+  risk_free_rate: 0.042
+  # Minimum observations before a statistic is considered meaningful.
+  min_observations: 30
+
+models:
+  portfolio:
+    +materialized: view
+    staging:
+      +schema: staging
+      +materialized: view
+    intermediate:
+      +schema: intermediate
+      +materialized: view
+    marts:
+      +schema: marts
+      +materialized: table

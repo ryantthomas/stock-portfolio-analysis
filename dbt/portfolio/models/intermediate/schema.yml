@@ -1,0 +1,40 @@
+version: 2
+
+models:
+  - name: int_daily_returns
+    description: Daily simple returns per ticker, lagged within each symbol's own history.
+    columns:
+      - name: daily_return
+        tests: [not_null]
+
+  - name: int_security_stats
+    description: Per-ticker annualized return, volatility, Sharpe and max drawdown.
+    columns:
+      - name: ticker
+        tests: [not_null, unique]
+      - name: observations
+        tests: [not_null]
+
+  - name: int_portfolio_daily_returns
+    description: >
+      Daily portfolio return assuming daily rebalancing to target weights.
+      Days where not every holding traded are excluded.
+    columns:
+      - name: portfolio_id
+        tests: [not_null]
+      - name: portfolio_return
+        tests: [not_null]
+
+  - name: int_pair_correlations
+    description: Pairwise correlations for tickers held in the same portfolio.
+    columns:
+      - name: correlation
+        tests: [not_null]
+
+  - name: int_portfolio_positions
+    description: Positions enriched with security metadata and per-security statistics.
+    columns:
+      - name: portfolio_id
+        tests: [not_null]
+      - name: weight
+        tests: [not_null]

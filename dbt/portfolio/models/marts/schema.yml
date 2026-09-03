@@ -1,0 +1,100 @@
+version: 2
+
+models:
+  - name: mart_security_performance
+    description: One row per security with descriptive data, risk and return statistics.
+    columns:
+      - name: ticker
+        description: Upper-cased provider symbol.
+        tests: [not_null, unique]
+      - name: annual_volatility
+        description: Annualized standard deviation of daily returns.
+      - name: sharpe_ratio
+        description: Excess annual return per unit of volatility.
+      - name: max_drawdown
+        description: Deepest peak-to-trough decline, as a negative decimal.
+
+  - name: mart_portfolio_performance
+    description: Daily equity curve and drawdown path for each saved portfolio.
+    columns:
+      - name: portfolio_id
+        tests: [not_null]
+      - name: price_date
+        tests: [not_null]
+      - name: growth_index
+        description: Growth of 100 invested at the start of the window.
+        tests: [not_null]
+      - name: drawdown
+        description: Fraction below the running peak; always zero or negative.
+
+  - name: mart_portfolio_risk
+    description: Headline risk and return statistics, one row per portfolio.
+    columns:
+      - name: portfolio_id
+        tests: [not_null, unique]
+      - name: observations
+        description: Trading days the statistics were computed over.
+        tests: [not_null]
+      - name: annual_volatility
+        description: Annualized portfolio volatility.
+      - name: sortino_ratio
+        description: Excess return per unit of downside deviation only.
+
+  - name: mart_portfolio_allocation
+    description: Portfolio weights unpivoted across sector, asset class, country, industry and ticker.
+    columns:
+      - name: portfolio_id
+        tests: [not_null]
+      - name: dimension
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['sector', 'asset_class', 'country', 'industry', 'ticker']
+      - name: weight
+        description: Share of the portfolio in this bucket.
+        tests: [not_null]
+
+  - name: mart_portfolio_diversification
+    description: >
+      Concentration, correlation and volatility-reduction metrics. The single
+      most useful table for answering "is this portfolio actually diversified".
+    columns:
+      - name: portfolio_id
+        tests: [not_null, unique]
+      - name: hhi
+        description: Herfindahl index of position weights; 1.0 is a single holding.
+        tests: [not_null]
+      - name: effective_holdings
+        description: 1/HHI -- the equal-weight position count with the same concentration.
+      - name: avg_correlation
+        description: Size-weighted mean of off-diagonal pairwise correlations.
+      - name: diversification_ratio
+        description: Weighted average asset volatility over realized portfolio volatility.
+
+  - name: mart_correlation_matrix
+    description: Symmetric long-form correlation matrix, ready for a heatmap.
+    columns:
+      - name: portfolio_id
+        tests: [not_null]
+      - name: correlation
+        tests: [not_null]
+      - name: correlation_band
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['self', 'redundant', 'high', 'moderate', 'low', 'negative']
+
+  - name: mart_portfolio_opportunities
+    description: Rule-based findings about portfolio shape, severity-ranked.
+    columns:
+      - name: portfolio_id
+        tests: [not_null]
+      - name: severity
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['critical', 'warning', 'info']
+      - name: title
+        tests: [not_null]

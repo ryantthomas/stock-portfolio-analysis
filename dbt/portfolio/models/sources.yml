@@ -1,0 +1,41 @@
+version: 2
+
+sources:
+  - name: raw
+    description: >
+      Landing zone written by the FastAPI service. Nothing in this schema is
+      transformed -- prices, security metadata and portfolio snapshots arrive
+      exactly as the market data provider returned them.
+    schema: raw
+    tables:
+      - name: prices
+        description: Daily adjusted close, one row per ticker per trading day.
+        columns:
+          - name: ticker
+            description: Provider symbol, upper-cased.
+            tests: [not_null]
+          - name: price_date
+            description: Trading date of the close.
+            tests: [not_null]
+          - name: adj_close
+            description: Split- and dividend-adjusted closing price.
+            tests: [not_null]
+          - name: provider
+            description: Which source served this row (openbb, yfinance, demo).
+            tests: [not_null]
+
+      - name: securities
+        description: Descriptive and fundamental metadata, one row per ticker.
+        columns:
+          - name: ticker
+            tests: [not_null, unique]
+
+      - name: portfolio_holdings
+        description: A snapshot of every portfolio submitted for analysis.
+        columns:
+          - name: portfolio_id
+            tests: [not_null]
+          - name: ticker
+            tests: [not_null]
+          - name: weight
+            tests: [not_null]

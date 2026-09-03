@@ -24,6 +24,9 @@ class HoldingInput(BaseModel):
 
 class AnalyzeRequest(BaseModel):
     holdings: list[HoldingInput] = Field(..., min_length=1, max_length=100)
+    # Naming a portfolio makes warehouse snapshots comparable over time;
+    # without it every saved run is indistinguishable from the others.
+    label: str | None = Field(None, max_length=120)
     benchmark: str = "SPY"
     lookback_days: int = Field(1095, ge=90, le=7300)
     provider: str = "auto"
