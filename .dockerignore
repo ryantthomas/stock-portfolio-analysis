@@ -1,0 +1,30 @@
+# Build artifacts and caches -- the image builds these itself.
+**/node_modules
+**/dist
+**/.vite
+**/__pycache__
+**/*.py[cod]
+.venv
+venv
+**/.pytest_cache
+**/.ruff_cache
+**/*.tsbuildinfo
+
+# Local data and dbt output.
+data/
+dbt/portfolio/target/
+dbt/portfolio/dbt_packages/
+dbt/portfolio/logs/
+
+# VCS and editor noise.
+.git
+.gitignore
+.github
+.idea
+.vscode
+.DS_Store
+
+# Secrets must never enter the build context.
+.env
+.env.*
+!.env.example

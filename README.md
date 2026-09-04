@@ -243,6 +243,53 @@ proportionally, so only relative sizing matters.
 
 ---
 
+## Deploying
+
+The API serves the built React app itself, so a deployment is **one container
+on one origin** — no separate static host, no CORS to configure, one thing to
+monitor. Everything below builds the same `Dockerfile`.
+
+```bash
+docker compose up --build     # http://localhost:8000
+```
+
+**Render** — commit `render.yaml`, then *New → Blueprint* and point it at the
+repo. **Fly.io** — `fly launch --no-deploy` once, then `fly deploy`. Both read
+the config files in the repo root. Anything that runs a container works the
+same way; the image reads `$PORT` if the host injects one.
+
+### Before you expose it publicly
+
+The image defaults to a safe posture, but it is worth knowing what each switch
+does:
+
+| Setting | Default in image | Why |
+|---|---|---|
+| `PORTFOLIO_ENABLE_WAREHOUSE_API` | `false` | `/api/warehouse/query` runs arbitrary SQL and `/api/warehouse/dbt` spawns a subprocess. Operator tools, not features. **Never enable on a public site.** |
+| `PORTFOLIO_PERSIST_PORTFOLIOS` | `false` | Otherwise every visitor's portfolio is written to the warehouse, unbounded and with no per-user isolation. |
+| `PORTFOLIO_RATE_LIMIT_PER_MINUTE` | `30` | `/analyze` does real work and calls upstream market-data APIs. `0` disables. |
+
+Three limits to be aware of:
+
+- **The rate limiter is per-process.** Running N replicas allows roughly N×
+  the configured rate, and it keys off `X-Forwarded-For`, which clients can
+  spoof. It stops accidental loops and casual abuse, not a determined attacker
+  — put a real limiter in your proxy or CDN if you need one.
+- **There are no user accounts.** Portfolios are not saved per person; the app
+  keeps your holdings in `localStorage` in your own browser.
+- **The warehouse is a cache, not a database of record.** Without a mounted
+  volume it resets on redeploy, which costs nothing but a refetch. dbt is a
+  local/operator workflow, not something the deployed container runs.
+
+### Market data in production
+
+The image installs the `yfinance` extra, so a deployed instance serves real
+prices and the simulated-data banner disappears. For better data, add the
+OpenBB extra and its credentials — the provider chain picks the best available
+source with no code change.
+
+---
+
 ## Configuration
 
 Environment variables, all prefixed `PORTFOLIO_` (or a `.env` file):
@@ -253,8 +300,12 @@ Environment variables, all prefixed `PORTFOLIO_` (or a `.env` file):
 | `PORTFOLIO_PROVIDER` | `auto` | Default provider preference |
 | `PORTFOLIO_RISK_FREE_RATE` | `0.042` | Annualized rate for Sharpe |
 | `PORTFOLIO_TRADING_DAYS` | `252` | Annualization factor |
-| `PORTFOLIO_CORS_ORIGINS` | `http://localhost:5173,…` | Allowed browser origins |
+| `PORTFOLIO_CORS_ORIGINS` | `http://localhost:5173,…` | Allowed browser origins (unused when one origin serves both) |
 | `PORTFOLIO_OPENBB_VENDOR` | `yfinance` | Vendor OpenBB routes to |
+| `PORTFOLIO_STATIC_DIR` | `web/dist` | Built frontend to serve; API-only if absent |
+| `PORTFOLIO_ENABLE_WAREHOUSE_API` | `false` | Operator-only SQL and dbt endpoints |
+| `PORTFOLIO_PERSIST_PORTFOLIOS` | `true` | Save a snapshot of each analyzed portfolio |
+| `PORTFOLIO_RATE_LIMIT_PER_MINUTE` | `30` | Per-IP limit on `/analyze`; `0` disables |
 
 ---
 

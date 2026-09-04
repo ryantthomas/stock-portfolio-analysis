@@ -241,18 +241,135 @@ class TestOpportunities:
             assert opportunity["kind"]
 
 
+@pytest.fixture
+def warehouse_api_enabled():
+    """Temporarily enable the operator-only warehouse endpoints."""
+    from app import main
+
+    original = main.settings.enable_warehouse_api
+    main.settings.enable_warehouse_api = True
+    yield
+    main.settings.enable_warehouse_api = original
+
+
+class TestWarehouseEndpointsAreGated:
+    """These run arbitrary SQL and invoke dbt, so they must be opt-in."""
+
+    def test_tables_is_disabled_by_default(self):
+        assert client.get("/api/warehouse/tables").status_code == 404
+
+    def test_query_is_disabled_by_default(self):
+        response = client.post("/api/warehouse/query", json={"sql": "select 1"})
+        assert response.status_code == 404
+
+    def test_dbt_is_disabled_by_default(self):
+        response = client.post("/api/warehouse/dbt", json={"command": "build"})
+        assert response.status_code == 404
+
+    def test_the_refusal_explains_how_to_enable(self):
+        detail = client.get("/api/warehouse/tables").json()["detail"]
+        assert "PORTFOLIO_ENABLE_WAREHOUSE_API" in detail
+
+
 class TestWarehouseEndpoints:
-    def test_lists_tables(self):
+    def test_lists_tables(self, warehouse_api_enabled):
         response = client.get("/api/warehouse/tables")
         assert response.status_code == 200
         assert isinstance(response.json(), list)
 
-    def test_rejects_non_select_sql(self):
+    def test_rejects_non_select_sql(self, warehouse_api_enabled):
         response = client.post(
             "/api/warehouse/query", json={"sql": "DROP TABLE raw.prices"}
         )
         assert response.status_code == 400
 
-    def test_rejects_unsupported_dbt_command(self):
+    def test_rejects_unsupported_dbt_command(self, warehouse_api_enabled):
         response = client.post("/api/warehouse/dbt", json={"command": "destroy"})
         assert response.status_code == 400
+
+
+class TestRateLimiting:
+    def test_blocks_once_the_allowance_is_spent(self):
+        from app import main
+
+        main.limiter.limit = 2
+        main.limiter.reset()
+        try:
+            body = payload([("VTI", 100)])
+            assert client.post("/api/portfolio/analyze", json=body).status_code == 200
+            assert client.post("/api/portfolio/analyze", json=body).status_code == 200
+
+            blocked = client.post("/api/portfolio/analyze", json=body)
+            assert blocked.status_code == 429
+            assert "Retry-After" in blocked.headers
+        finally:
+            main.limiter.limit = 0
+            main.limiter.reset()
+
+    def test_search_is_not_throttled(self):
+        """Autocomplete fires on every keystroke; throttling it would break typing."""
+        from app import main
+
+        main.limiter.limit = 1
+        main.limiter.reset()
+        try:
+            for _ in range(10):
+                assert client.get("/api/search", params={"q": "V"}).status_code == 200
+        finally:
+            main.limiter.limit = 0
+            main.limiter.reset()
+
+
+class TestPersistenceSwitch:
+    """A public deployment must not accumulate snapshots from anonymous users."""
+
+    @staticmethod
+    def _holdings_rows() -> int:
+        from app import warehouse
+
+        warehouse.initialize()
+        con = warehouse.connect(read_only=True)
+        try:
+            return con.execute(
+                f"SELECT COUNT(*) FROM {warehouse.RAW_SCHEMA}.portfolio_holdings"
+            ).fetchone()[0]
+        finally:
+            con.close()
+
+    def test_disabled_persistence_writes_no_snapshot(self):
+        from app import main
+
+        original = main.settings.persist_portfolios
+        main.settings.persist_portfolios = False
+        try:
+            before = self._holdings_rows()
+            response = client.post(
+                "/api/portfolio/analyze", json=payload([("VTI", 60), ("BND", 40)])
+            )
+            assert response.status_code == 200
+            assert self._holdings_rows() == before
+        finally:
+            main.settings.persist_portfolios = original
+
+    def test_enabled_persistence_writes_a_snapshot(self):
+        from app import main
+
+        original = main.settings.persist_portfolios
+        main.settings.persist_portfolios = True
+        try:
+            before = self._holdings_rows()
+            response = client.post(
+                "/api/portfolio/analyze", json=payload([("VTI", 60), ("BND", 40)])
+            )
+            assert response.status_code == 200
+            assert self._holdings_rows() > before
+        finally:
+            main.settings.persist_portfolios = original
+
+
+class TestFrontendServing:
+    def test_unknown_api_path_stays_a_json_404(self):
+        """It must not fall through to the SPA shell and confuse a fetch call."""
+        response = client.get("/api/does-not-exist")
+        assert response.status_code == 404
+        assert "text/html" not in response.headers.get("content-type", "")

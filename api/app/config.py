@@ -24,8 +24,27 @@ class Settings(BaseSettings):
     # Provider preference order. "auto" walks the chain until one succeeds.
     provider: str = "auto"
 
-    # Origins allowed to call the API from a browser.
+    # Origins allowed to call the API from a browser. Irrelevant when the API
+    # also serves the frontend, since everything is then one origin.
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+
+    # Built frontend to serve. When this directory exists the API serves the
+    # SPA itself, so a deployment is a single container on a single origin.
+    static_dir: Path = REPO_ROOT / "web" / "dist"
+
+    # The warehouse endpoints run arbitrary SQL and shell out to dbt. They are
+    # operator tools, not user-facing features, so they are off unless
+    # explicitly enabled -- a public deployment must leave this False.
+    enable_warehouse_api: bool = False
+
+    # Whether an analysis saves a snapshot of the portfolio. Useful locally for
+    # building dbt models; on a public site it accumulates unbounded rows from
+    # anonymous visitors, so deployments generally want it off.
+    persist_portfolios: bool = True
+
+    # Requests per minute per client IP for the analysis endpoint. 0 disables
+    # the limit. In-process only -- see the note in main.py.
+    rate_limit_per_minute: int = 30
 
     # Price history cached on disk for this many minutes before refetching.
     cache_ttl_minutes: int = 60

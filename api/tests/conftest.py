@@ -22,3 +22,21 @@ def isolated_warehouse():
         settings.duckdb_path = Path(tmp) / "test_warehouse.duckdb"
         yield settings.duckdb_path
     get_settings.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def no_rate_limit():
+    """Disable throttling for every test that does not explicitly want it.
+
+    The suite makes far more analysis calls than a real client would, and a
+    test failing because a previous test used up the allowance would be a
+    confusing false negative. Rate limiting has its own dedicated tests.
+    """
+    from app import main
+
+    original = main.limiter.limit
+    main.limiter.limit = 0
+    main.limiter.reset()
+    yield
+    main.limiter.limit = original
+    main.limiter.reset()

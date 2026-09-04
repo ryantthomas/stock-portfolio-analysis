@@ -1,0 +1,20 @@
+# Local production-like run:  docker compose up --build  ->  http://localhost:8000
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      # Live market data. Drop this to fall back to the offline demo provider.
+      PORTFOLIO_PROVIDER: auto
+      # Operator-only endpoints (arbitrary SQL, dbt). Leave false when exposed.
+      PORTFOLIO_ENABLE_WAREHOUSE_API: "false"
+      PORTFOLIO_PERSIST_PORTFOLIOS: "false"
+      PORTFOLIO_RATE_LIMIT_PER_MINUTE: "30"
+    volumes:
+      # Keeps the price cache across restarts. Remove for a stateless container.
+      - warehouse:/data
+    restart: unless-stopped
+
+volumes:
+  warehouse:

@@ -1,0 +1,26 @@
+# Render blueprint: https://render.com/docs/blueprint-spec
+# Commit this, then "New > Blueprint" in Render and point it at the repo.
+services:
+  - type: web
+    name: portfolio-analysis
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORTFOLIO_PROVIDER
+        value: auto
+      # These two default to false in the image; set explicitly so the intent
+      # is visible in the dashboard rather than implied.
+      - key: PORTFOLIO_ENABLE_WAREHOUSE_API
+        value: "false"
+      - key: PORTFOLIO_PERSIST_PORTFOLIOS
+        value: "false"
+      - key: PORTFOLIO_RATE_LIMIT_PER_MINUTE
+        value: "30"
+    disk:
+      # Optional. Without it the price cache resets on each deploy, which only
+      # costs a refetch on the next request.
+      name: warehouse
+      mountPath: /data
+      sizeGB: 1
