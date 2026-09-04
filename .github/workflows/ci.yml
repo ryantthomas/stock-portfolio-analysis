@@ -1,0 +1,140 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    name: API (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      - name: Install
+        run: pip install -e './api[dev,dbt]'
+
+      - name: Lint
+        run: ruff check api
+
+      - name: Test
+        run: pytest tests -q
+        working-directory: api
+
+  api-floor:
+    # The declared dependency floors are only a real promise if something
+    # exercises them; a resolver picking the latest of everything never does.
+    name: API at lowest allowed dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: astral-sh/setup-uv@v5
+      - name: Install lowest allowed versions
+        run: uv pip install --system --resolution lowest-direct -e './api[dev]'
+      - name: Report resolved versions
+        run: pip list | grep -iE '^(fastapi|pydantic|numpy|pandas|duckdb|httpx) '
+      - name: Test
+        run: pytest tests -q
+        working-directory: api
+
+  web:
+    name: Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Vite 8 requires ^20.19 || >=22.12.
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install
+        run: npm ci
+        working-directory: web
+
+      - name: Typecheck
+        run: npm run typecheck
+        working-directory: web
+
+      - name: Test
+        run: npm test
+        working-directory: web
+
+      - name: Build
+        run: npm run build
+        working-directory: web
+
+  warehouse:
+    name: dbt models
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install
+        run: pip install -e './api[dbt]'
+      - name: Seed example portfolios
+        run: python -m app.seed --provider demo
+        working-directory: api
+      - name: Build and test models
+        run: dbt build --project-dir dbt/portfolio --profiles-dir dbt/portfolio
+        env:
+          DUCKDB_PATH: ${{ github.workspace }}/data/warehouse.duckdb
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: portfolio-analysis:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test the running container
+        run: |
+          docker run -d --name app -p 8000:8000 \
+            -e PORTFOLIO_PROVIDER=demo \
+            portfolio-analysis:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8000/api/health >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          echo "--- health ---"
+          curl -fsS http://127.0.0.1:8000/api/health
+          echo "--- SPA is served ---"
+          curl -fsS http://127.0.0.1:8000/ | grep -q "<div id=\"root\">"
+          echo "--- operator endpoints must be closed ---"
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/api/warehouse/tables)" = "404"
+          echo "--- analysis works ---"
+          curl -fsS -X POST http://127.0.0.1:8000/api/portfolio/analyze \
+            -H 'Content-Type: application/json' \
+            -d '{"holdings":[{"ticker":"VTI","weight":60},{"ticker":"BND","weight":40}],"provider":"demo","lookback_days":365}' \
+            | head -c 200
+          docker rm -f app

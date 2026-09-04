@@ -1,0 +1,54 @@
+# Optional: deploy to Cloud Run on every push to the default branch.
+#
+# Disabled until configured. To turn it on:
+#
+#  1. Set repository variables GCP_PROJECT_ID, GCP_REGION and CLOUD_RUN_SERVICE.
+#  2. Set up Workload Identity Federation (keyless -- no long-lived JSON key):
+#       https://github.com/google-github-actions/auth#workload-identity-federation
+#     then set GCP_WORKLOAD_IDENTITY_PROVIDER and GCP_SERVICE_ACCOUNT.
+#  3. Change the `if:` below to `true`, or delete it.
+#
+# Deploying by hand with ./deploy/cloudrun.sh is perfectly fine too; this only
+# earns its keep once you are pushing changes regularly.
+
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    # Remove this guard once the variables above are configured.
+    if: ${{ vars.GCP_PROJECT_ID != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # required to mint the federated token
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy
+        run: |
+          gcloud run deploy "${{ vars.CLOUD_RUN_SERVICE || 'portfolio-analysis' }}" \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ vars.GCP_REGION || 'us-central1' }}" \
+            --source . \
+            --allow-unauthenticated \
+            --memory 512Mi \
+            --cpu 1 \
+            --min-instances 0 \
+            --max-instances 3 \
+            --concurrency 20 \
+            --timeout 60 \
+            --set-env-vars "PORTFOLIO_PROVIDER=auto,PORTFOLIO_ENABLE_WAREHOUSE_API=false,PORTFOLIO_PERSIST_PORTFOLIOS=false,PORTFOLIO_RATE_LIMIT_PER_MINUTE=30,PORTFOLIO_DUCKDB_PATH=/tmp/warehouse.duckdb"

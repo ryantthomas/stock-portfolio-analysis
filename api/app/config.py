@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from functools import lru_cache
 from pathlib import Path
 
@@ -63,5 +64,18 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     settings = Settings()
-    settings.duckdb_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        settings.duckdb_path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        # The warehouse is a cache, not a requirement: analysis runs entirely
+        # in memory and persistence is optional. Failing here would take the
+        # whole site down at import time over a read-only or misconfigured
+        # path, so warn and carry on -- `warehouse.connect` retries the mkdir
+        # and its callers already handle the failure.
+        logging.getLogger(__name__).warning(
+            "Could not create the warehouse directory %s (%s). "
+            "Continuing without persistence.",
+            settings.duckdb_path.parent,
+            exc,
+        )
     return settings

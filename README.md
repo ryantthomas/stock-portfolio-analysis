@@ -253,10 +253,38 @@ monitor. Everything below builds the same `Dockerfile`.
 docker compose up --build     # http://localhost:8000
 ```
 
+**Google Cloud Run** — the cheapest option for a personal site, and the one
+this repo is tuned for:
+
+```bash
+./deploy/cloudrun.sh my-gcp-project
+```
+
+Cloud Build compiles the Dockerfile, so there is nothing to push by hand. The
+script scales to zero, caps at 3 instances and requests 512Mi — measured peak
+is ~120MB for 25 holdings over 10 years, and the analysis itself takes about
+0.1s, so the small tier is genuinely enough. With scale-to-zero and Cloud Run's
+monthly free allowance, a personal-traffic instance typically costs nothing;
+the trade is a ~2-4s cold start on the first request after an idle period. The
+`--max-instances` ceiling is the guard that keeps a traffic spike from becoming
+a bill.
+
+Cloud Run's filesystem is in-memory and resets on every deploy, so the script
+points the warehouse at `/tmp` and disables persistence. Nothing is lost —
+prices are refetched on demand.
+
 **Render** — commit `render.yaml`, then *New → Blueprint* and point it at the
 repo. **Fly.io** — `fly launch --no-deploy` once, then `fly deploy`. Both read
 the config files in the repo root. Anything that runs a container works the
 same way; the image reads `$PORT` if the host injects one.
+
+**GitHub Pages cannot host this.** Pages serves static files only, and the
+analytics are a Python service — the covariance maths behind risk contribution
+and the diversification score runs in numpy on the server. What GitHub *does*
+do is build, test and deploy it: `.github/workflows/ci.yml` runs the full suite
+(including a Docker build and a smoke test against the running container), and
+`.github/workflows/deploy-cloudrun.yml` ships to Cloud Run on push once you
+configure Workload Identity Federation.
 
 ### Before you expose it publicly
 
@@ -279,7 +307,9 @@ Three limits to be aware of:
   keeps your holdings in `localStorage` in your own browser.
 - **The warehouse is a cache, not a database of record.** Without a mounted
   volume it resets on redeploy, which costs nothing but a refetch. dbt is a
-  local/operator workflow, not something the deployed container runs.
+  local/operator workflow, not something the deployed container runs. If its
+  directory is unwritable the app logs a warning and serves normally rather
+  than failing to start.
 
 ### Market data in production
 

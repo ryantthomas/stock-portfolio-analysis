@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+from unittest import mock
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -365,6 +368,27 @@ class TestPersistenceSwitch:
             assert self._holdings_rows() > before
         finally:
             main.settings.persist_portfolios = original
+
+
+class TestWarehouseIsOptional:
+    def test_an_unwritable_warehouse_path_does_not_break_startup(self):
+        """The warehouse is a cache. A bad path must not take the site down."""
+        import importlib
+
+        from app import config
+
+        config.get_settings.cache_clear()
+        try:
+            with mock.patch.dict(
+                os.environ, {"PORTFOLIO_DUCKDB_PATH": "/proc/nope/warehouse.duckdb"}
+            ):
+                settings = config.get_settings()
+                assert settings.duckdb_path.name == "warehouse.duckdb"
+                # Importing the app must still succeed.
+                importlib.reload(importlib.import_module("app.main"))
+        finally:
+            config.get_settings.cache_clear()
+            importlib.reload(importlib.import_module("app.main"))
 
 
 class TestFrontendServing:
