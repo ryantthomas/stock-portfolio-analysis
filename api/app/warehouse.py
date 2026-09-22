@@ -114,11 +114,16 @@ def load_prices(prices: pd.DataFrame, provider: str) -> int:
     con = connect()
     try:
         con.register("incoming_prices", long)
+        # A correlated EXISTS rather than `(ticker, price_date) IN (subquery)`:
+        # DuckDB only accepts multi-column IN subqueries from 0.10.x onward,
+        # and on older versions the whole write failed -- silently, since
+        # persistence errors are logged rather than raised.
         con.execute(
             f"""
-            DELETE FROM {RAW_SCHEMA}.prices
-            WHERE (ticker, price_date) IN (
-                SELECT ticker, price_date FROM incoming_prices
+            DELETE FROM {RAW_SCHEMA}.prices AS p
+            WHERE EXISTS (
+                SELECT 1 FROM incoming_prices AS i
+                WHERE i.ticker = p.ticker AND i.price_date = p.price_date
             )
             """
         )

@@ -25,6 +25,9 @@ gcloud services enable run.googleapis.com cloudbuild.googleapis.com \
   artifactregistry.googleapis.com --project "$PROJECT"
 
 gcloud run deploy "$SERVICE" \
+  `# Accept the one-time prompt to create the Artifact Registry repository` \
+  `# that holds the built image, so the script runs start to finish.` \
+  --quiet \
   --project "$PROJECT" \
   --region "$REGION" \
   --source . \

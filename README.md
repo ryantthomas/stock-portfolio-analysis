@@ -245,6 +245,37 @@ proportionally, so only relative sizing matters.
 
 ## Deploying
 
+### Put it online in about ten minutes, from your browser
+
+Nothing to install — this uses Google Cloud Shell, a terminal in the browser
+that already has `gcloud` installed and signed in to your Google account.
+
+1. **Have a Google Cloud project with billing turned on.** Cloud Run needs a
+   billing account attached even though personal use normally stays inside the
+   free allowance. Create one at <https://console.cloud.google.com/projectcreate>
+   and note the **project ID** (e.g. `portfolio-4821`, not the display name).
+
+2. **Open this repo in Cloud Shell:**
+
+   [![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https://github.com/ryantthomas/stock-portfolio-analysis)
+
+   Or open <https://shell.cloud.google.com> and run
+   `git clone https://github.com/ryantthomas/stock-portfolio-analysis && cd stock-portfolio-analysis`.
+
+3. **Deploy:**
+
+   ```bash
+   ./deploy/cloudrun.sh YOUR_PROJECT_ID
+   ```
+
+   The first run takes 3–6 minutes while Cloud Build compiles the image. It
+   prints the site's URL when it finishes — something like
+   `https://portfolio-analysis-abc123-uc.a.run.app`.
+
+To ship a change later, `git pull` in Cloud Shell and run the same command.
+
+### How it is packaged
+
 The API serves the built React app itself, so a deployment is **one container
 on one origin** — no separate static host, no CORS to configure, one thing to
 monitor. Everything below builds the same `Dockerfile`.
