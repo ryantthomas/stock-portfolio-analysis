@@ -22,7 +22,32 @@ fi
 echo "Deploying '$SERVICE' to project '$PROJECT' in $REGION"
 
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com \
-  artifactregistry.googleapis.com --project "$PROJECT"
+  artifactregistry.googleapis.com cloudresourcemanager.googleapis.com \
+  --project "$PROJECT"
+
+# Source deploys are built by the project's default Compute Engine service
+# account. Projects created since 2024 no longer grant it anything by default,
+# so the build fails with PERMISSION_DENIED reading the uploaded source. Give
+# it the purpose-built Cloud Run Builder role, once. Idempotent.
+PROJECT_NUMBER="$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')"
+BUILD_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+
+if gcloud projects get-iam-policy "$PROJECT" \
+     --flatten="bindings[].members" \
+     --filter="bindings.role=roles/run.builder AND bindings.members=serviceAccount:${BUILD_SA}" \
+     --format="value(bindings.role)" | grep -q "roles/run.builder"; then
+  echo "Build service account already has the Cloud Run Builder role."
+else
+  echo "Granting the Cloud Run Builder role to ${BUILD_SA} (one-time setup)..."
+  gcloud projects add-iam-policy-binding "$PROJECT" \
+    --member="serviceAccount:${BUILD_SA}" \
+    --role="roles/run.builder" \
+    --condition=None --quiet >/dev/null
+  # IAM changes take a little while to reach Cloud Build; deploying straight
+  # away can fail with the same error the grant just fixed.
+  echo "Waiting 60s for the permission to take effect..."
+  sleep 60
+fi
 
 gcloud run deploy "$SERVICE" \
   `# Accept the one-time prompt to create the Artifact Registry repository` \
