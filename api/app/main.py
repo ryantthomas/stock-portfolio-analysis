@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -49,6 +50,12 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
+
+# Analysis responses are large, highly repetitive JSON (daily series, a
+# correlation matrix) and the chart bundle is ~530 KB, so compression cuts
+# bytes on the wire several-fold. Outbound transfer is billed on most hosts,
+# and it also makes the site noticeably faster on a phone.
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 limiter = RateLimiter(limit=settings.rate_limit_per_minute)
 
@@ -176,11 +183,24 @@ def run_query(request: QueryRequest) -> dict:
 
 _static_dir = settings.static_dir
 
+class ImmutableStaticFiles(StaticFiles):
+    """Static files that browsers may cache forever.
+
+    Safe only because Vite puts a content hash in every asset filename: a new
+    build produces new names, so a cached copy can never be stale. Returning
+    visitors then fetch nothing but index.html and the API responses.
+    """
+
+    def file_response(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
+
+
 if _static_dir.is_dir():
-    # Hashed asset filenames are safe to cache indefinitely.
     app.mount(
         "/assets",
-        StaticFiles(directory=_static_dir / "assets"),
+        ImmutableStaticFiles(directory=_static_dir / "assets"),
         name="assets",
     )
 
@@ -209,7 +229,10 @@ if _static_dir.is_dir():
         index = _static_dir / "index.html"
         if not index.is_file():
             raise HTTPException(status_code=404, detail="Frontend is not built")
-        return FileResponse(index)
+        # The shell must always be revalidated: it is what points at the
+        # current hashed assets, so a cached copy would pin visitors to an old
+        # deploy.
+        return FileResponse(index, headers={"Cache-Control": "no-cache"})
 
     log.info("Serving frontend from %s", _static_dir)
 else:

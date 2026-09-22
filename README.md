@@ -292,13 +292,41 @@ this repo is tuned for:
 ```
 
 Cloud Build compiles the Dockerfile, so there is nothing to push by hand. The
-script scales to zero, caps at 3 instances and requests 512Mi — measured peak
-is ~120MB for 25 holdings over 10 years, and the analysis itself takes about
-0.1s, so the small tier is genuinely enough. With scale-to-zero and Cloud Run's
-monthly free allowance, a personal-traffic instance typically costs nothing;
-the trade is a ~2-4s cold start on the first request after an idle period. The
-`--max-instances` ceiling is the guard that keeps a traffic spike from becoming
-a bill.
+script scales to zero, runs at most one instance and requests 512Mi — measured
+peak is ~120MB for 25 holdings over 10 years, and the analysis itself takes
+about 0.1s, so the small tier is genuinely enough. See **What it costs** below.
+
+#### What it costs
+
+For personal use: **nothing**, in practice. Cloud Run bills only while a request
+is being handled, and each month's free allowance (at the time of writing:
+180,000 vCPU-seconds, 360,000 GiB-seconds of memory and 2 million requests)
+dwarfs what one person uses. Check Google's current pricing page before relying
+on the exact figures.
+
+| What is billed | This app's usage | Against the free allowance |
+|---|---|---|
+| CPU while handling a request | ~2s per analysis with live data, ~0.1s of it compute | 50 analyses a day ≈ 3,000 vCPU-s/month — under 2% |
+| Memory while handling a request | 512Mi requested, ~120MB actually used | Covered by the same arithmetic, with more headroom than CPU |
+| Idle time | Scales to zero | **$0** — no traffic, no charge |
+| Data sent to browsers | gzip: ~15 KB per analysis, ~160 KB on a first visit, and the chart bundle is cached for returning visitors | Negligible |
+| Image storage | One image per deploy | The script prunes to the newest two |
+| Building | A few minutes of Cloud Build per deploy | Within its free build-minutes |
+
+The trade for scale-to-zero is a cold start of a few seconds on the first
+request after the site has been idle.
+
+**The worst case is bounded.** With `--max-instances 1`, the most Cloud Run can
+bill is one small instance running flat out every second of the month —
+roughly $60 at current list prices, and only if something hammers the site
+around the clock. The per-IP rate limit makes that hard for a single source.
+To hear about it long before then, add a budget alert:
+*Billing → Budgets & alerts → Create budget*, scoped to this project, amount
+**$1**, alerts at 50% and 100%. Budgets email you; they do not stop spending.
+
+Google Cloud requires a billing account with a card attached even for usage
+that stays inside the free allowance, and new accounts typically get trial
+credit on top.
 
 Cloud Run's filesystem is in-memory and resets on every deploy, so the script
 points the warehouse at `/tmp` and disables persistence. Nothing is lost —

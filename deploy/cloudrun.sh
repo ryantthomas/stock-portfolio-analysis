@@ -41,9 +41,11 @@ gcloud run deploy "$SERVICE" \
   `# Scale to zero: no traffic, no charge. The cost is a ~2-4s cold start` \
   `# on the first request after an idle period.` \
   --min-instances 0 \
-  `# The single most important cost guard. Without a ceiling, a traffic` \
-  `# spike (or a crawler) scales out and bills you for it.` \
-  --max-instances 3 \
+  `# The single most important cost guard: it bounds the worst case to one` \
+  `# machine. One instance handling 20 requests at once is far more than a` \
+  `# personal site needs, and a single process also makes the per-IP rate` \
+  `# limiter exact rather than per-replica.` \
+  --max-instances 1 \
   --concurrency 20 \
   --timeout 60 \
   --set-env-vars "PORTFOLIO_PROVIDER=auto,\
@@ -51,6 +53,29 @@ PORTFOLIO_ENABLE_WAREHOUSE_API=false,\
 PORTFOLIO_PERSIST_PORTFOLIOS=false,\
 PORTFOLIO_RATE_LIMIT_PER_MINUTE=30,\
 PORTFOLIO_DUCKDB_PATH=/tmp/warehouse.duckdb"
+
+# Every deploy stores a new image. Storage beyond the free allowance is only
+# cents, but it grows forever unless pruned, so keep the two newest images
+# (the live one plus one to roll back to) and delete the rest. Best-effort:
+# a failure here never affects the running site.
+POLICY_FILE="$(mktemp)"
+cat > "$POLICY_FILE" <<'JSON'
+[
+  {"name": "keep-two-newest", "action": {"type": "Keep"},
+   "mostRecentVersions": {"keepCount": 2}},
+  {"name": "delete-older", "action": {"type": "Delete"},
+   "condition": {"tagState": "any", "olderThan": "1d"}}
+]
+JSON
+if gcloud artifacts repositories set-cleanup-policies cloud-run-source-deploy \
+     --project "$PROJECT" --location "$REGION" \
+     --policy "$POLICY_FILE" --no-dry-run --quiet >/dev/null 2>&1; then
+  echo "Old images will be pruned automatically (keeping the newest two)."
+else
+  echo "Note: could not set an image cleanup policy; old images will accumulate" >&2
+  echo "      (a few cents a month at most). The site itself is unaffected." >&2
+fi
+rm -f "$POLICY_FILE"
 
 echo
 echo "Deployed. URL:"

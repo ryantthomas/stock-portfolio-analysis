@@ -391,6 +391,36 @@ class TestWarehouseIsOptional:
             importlib.reload(importlib.import_module("app.main"))
 
 
+class TestTransferEfficiency:
+    """Bytes on the wire are billed by hosts and felt by users on phones."""
+
+    def test_analysis_is_gzipped_when_the_client_accepts_it(self):
+        response = client.post(
+            "/api/portfolio/analyze",
+            json=payload([("VTI", 50), ("VXUS", 30), ("BND", 20)]),
+            headers={"Accept-Encoding": "gzip"},
+        )
+        assert response.status_code == 200
+        assert response.headers.get("content-encoding") == "gzip"
+        # The client transparently decompresses; the payload is intact.
+        assert response.json()["performance"]
+
+    def test_hashed_assets_are_cacheable_forever(self, tmp_path):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        from app.main import ImmutableStaticFiles
+
+        (tmp_path / "index-abc123.js").write_text("console.log(1)")
+        mini = FastAPI()
+        mini.mount("/assets", ImmutableStaticFiles(directory=tmp_path), name="assets")
+
+        response = TestClient(mini).get("/assets/index-abc123.js")
+        assert response.status_code == 200
+        assert "immutable" in response.headers["cache-control"]
+        assert "max-age=31536000" in response.headers["cache-control"]
+
+
 class TestFrontendServing:
     def test_unknown_api_path_stays_a_json_404(self):
         """It must not fall through to the SPA shell and confuse a fetch call."""
